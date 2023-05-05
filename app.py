@@ -6,13 +6,19 @@ import os
 import openai
 from helpers import openai_call
 from streamlit_ws_localstorage import injectWebsocketCode, getOrCreateUID
-
+from streamlit_timeline import timeline
+# from streamlit_card import card
+from constants import EXAMPLE_PROFILE, EXAMPLE_TIMELINE
 st.set_page_config(
     '&.ai',
     layout='wide',
     page_icon="&.ai"
 )
-conn = injectWebsocketCode(hostPort='linode.liquidco.in', uid=getOrCreateUID())
+
+@st.cache_data
+def setup():
+    conn = injectWebsocketCode(hostPort='linode.liquidco.in', uid=getOrCreateUID())
+    return conn.getLocalStorageVal(key='k1')
 
 
 def main():
@@ -22,7 +28,7 @@ def main():
 
     current_time = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
     # Main call to the api, returns a communication object
-    ret = conn.getLocalStorageVal(key='k1')
+    ret = setup()
     needs_to_create_user_account = len(str(ret))==0
 
     if needs_to_create_user_account:
@@ -36,6 +42,7 @@ def main():
             #     st.warning('USER NAME "'+str(user_nom)+'" IS ALREADY TAKEN.')
             # else:        
             # st.warning('setting into localStorage')
+            conn = injectWebsocketCode(hostPort='linode.liquidco.in', uid=getOrCreateUID())
             ret1 = conn.setLocalStorageVal(key='k1', val=user_nom)
             # st.warning(ret1)
             if 'success' not in str(ret1):
@@ -48,6 +55,7 @@ def main():
         wow1.success('Welcome back '+ ret+'! 🎬📝', icon='💡')
         is_signedout = wow2.button('sign out')
         if is_signedout:
+            conn = injectWebsocketCode(hostPort='linode.liquidco.in', uid=getOrCreateUID())
             ret1 = conn.setLocalStorageVal(key='k1', val='')
             needs_to_create_user_account = True 
             user_nom = ""
@@ -72,10 +80,10 @@ def main():
                 os.environ['OPENAI_API_KEY'] = OPENAI_API_KEY
                 openai.api_key = OPENAI_API_KEY
 
-        tabs = st.tabs(['chat', 'history'])
+        tabs = st.tabs(['chat', 'history', 'outline', 'profiles'])
         database_df = pd.DataFrame()
         with tabs[0]:
-            if os.environ['OPENAI_API_KEY']:
+            if os.environ.get('OPENAI_API_KEY', None):
                 openai_call(user_nom, mode)
             else:
                 st.warning('please update `OPENAI_API_KEY` in the settings')
@@ -94,6 +102,38 @@ def main():
 
         with tabs[1]:
             st.dataframe(database_df)
+        with tabs[2]:
+            do_update1 = st.button('update',key='outline-update')
+            timeline_file = user_nom+'_timeline.json'
+            data = None
+            if os.path.exists(timeline_file):
+                # load data
+                with open(timeline_file, "r") as f:
+                    data = f.read()
+                # render timeline
+            else:
+               data =  EXAMPLE_TIMELINE
+            timeline(data, height=800)
+
+        with tabs[3]:
+            do_update2 = st.button('update',key='profile-update')
+
+            profiles = EXAMPLE_PROFILE
+            col1, _, col2 = st.columns([4,1,4])
+            for i,x in enumerate(profiles['characters']):
+                if i % 2 == 0:
+                    col1.header(x['name'])
+                    col1.slider('fluidity', key='char-'+str(i), value=5, min_value=0, max_value=10)
+                    col1.write(x['description'])
+                    col1.write(' ')
+                else:
+                    col2.header(x['name'])
+                    col2.slider('fluidity', key='char-'+str(i), value=9, min_value=0, max_value=10)
+                    col2.write(x['description'])
+                    col2.write(' ')
+
+            # if do_update2:
+
 
 
 if __name__ == '__main__':
